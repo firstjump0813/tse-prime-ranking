@@ -1,0 +1,47 @@
+name: Fetch TSE Prime Ranking
+
+on:
+  schedule:
+    # 毎週月〜金 16:10 JST (= 07:10 UTC)
+    - cron: '10 7 * * 1-5'
+  workflow_dispatch:  # 手動実行ボタンも有効化
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 pandas
+
+      - name: Set date (JST)
+        run: echo "TODAY=$(TZ=Asia/Tokyo date +%Y%m%d)" >> $GITHUB_ENV
+
+      - name: Run fetch script
+        run: python fetch_ranking.py
+
+      - name: Move CSV to data folder
+        run: |
+          if ls ranking_*.csv 1> /dev/null 2>&1; then
+            mv ranking_*.csv data/
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add ranking_${{ env.TODAY }}.csv"
+            git push
+          fi
