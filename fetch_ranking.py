@@ -121,7 +121,7 @@ def main():
             continue
 
         df["騰落率(%)"] = pd.to_numeric(df["騰落率(%)"], errors="coerce")
-        df["時刻"] = pd.to_datetime(df["時刻"], errors="coerce").dt.strftime("%Y/%m/%d")
+        df["時刻"] = pd.to_datetime(df["時刻"], unit="ms", errors="coerce").dt.strftime("%Y/%m/%d")
         ascending = (kind == "down")
         df = df.sort_values("騰落率(%)", ascending=ascending).reset_index(drop=True)
         df.index += 1
