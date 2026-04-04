@@ -1,7 +1,7 @@
 """
-東京証券取引所 プライム市場 値下がり率ランキング取得スクリプト
-Yahoo!ファイナンスから全市場データを取得し、東証プライム(東証PRM)に絞って
-ranking_yyyymmdd.csv として保存する
+東京証券取引所 値上がり率・値下がり率ランキング取得スクリプト
+Yahoo!ファイナンスから全市場データを取得し、
+ranking_down_yyyymmdd.csv / ranking_up_yyyymmdd.csv として保存する
 """
 
 import requests
@@ -13,8 +13,11 @@ import os
 import json
 import re
 
-SAVE_DIR = os.path.dirname(os.path.abspath(__file__))  # スクリプトと同じディレクトリに保存
-BASE_URL = "https://finance.yahoo.co.jp/stocks/ranking/down"
+SAVE_DIR = os.path.dirname(os.path.abspath(__file__))
+RANKING_URLS = {
+    "down": "https://finance.yahoo.co.jp/stocks/ranking/down",
+    "up":   "https://finance.yahoo.co.jp/stocks/ranking/up",
+}
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -22,17 +25,16 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
-PRIME_MARKET_NAME = "東証PRM"
 
 
-def fetch_page(page: int) -> tuple[list[dict], bool]:
+def fetch_page(url: str, page: int) -> tuple[list[dict], bool]:
     """
-    指定ページの値下がり率ランキングを取得する
+    指定URLの指定ページのランキングを取得する
     戻り値: (行データリスト, 次ページがあるか)
     """
     params = {"market": "all", "term": "daily", "page": page}
     try:
-        resp = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=30)
+        resp = requests.get(url, params=params, headers=HEADERS, timeout=30)
         resp.raise_for_status()
     except requests.RequestException as e:
         print(f"[ERROR] ページ {page} の取得に失敗しました: {e}", file=sys.stderr)
@@ -61,11 +63,6 @@ def fetch_page(page: int) -> tuple[list[dict], bool]:
 
     rows = []
     for item in ranking_list:
-        # プライム市場のみ抽出
-        if item.get("marketName", "") != PRIME_MARKET_NAME:
-            continue
-
-        # 騰落率・前日比は rankingResult.changePriceRate の下にある
         ranking_result = item.get("rankingResult", {}) or {}
         cpr = ranking_result.get("changePriceRate", {}) or {}
 
@@ -85,17 +82,17 @@ def fetch_page(page: int) -> tuple[list[dict], bool]:
     return rows, has_next
 
 
-def fetch_all_rankings() -> pd.DataFrame:
-    """全ページを取得してプライム市場の値下がり率ランキングをDataFrameにまとめる"""
+def fetch_all_rankings(url: str, label: str) -> pd.DataFrame:
+    """全ページを取得してDataFrameにまとめる"""
     all_rows = []
     page = 1
     while True:
         print(f"  ページ {page} を取得中...", flush=True)
-        rows, has_next = fetch_page(page)
+        rows, has_next = fetch_page(url, page)
 
         if rows:
             all_rows.extend(rows)
-            print(f"  → プライム: {len(rows)} 件（累計: {len(all_rows)} 件）", flush=True)
+            print(f"  → {len(rows)} 件（累計: {len(all_rows)} 件）", flush=True)
 
         if not has_next:
             print("  全ページ取得完了。")
@@ -109,25 +106,28 @@ def fetch_all_rankings() -> pd.DataFrame:
 def main():
     now = datetime.now()
     date_str = now.strftime("%Y%m%d")
-    output_path = os.path.join(SAVE_DIR, f"ranking_{date_str}.csv")
 
-    print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] 東証プライム 値下がり率ランキング取得開始")
-    print(f"保存先: {output_path}", flush=True)
+    for kind, url in RANKING_URLS.items():
+        label = "値下がり率" if kind == "down" else "値上がり率"
+        output_path = os.path.join(SAVE_DIR, f"ranking_{kind}_{date_str}.csv")
 
-    df = fetch_all_rankings()
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {label}ランキング取得開始（全市場）")
+        print(f"保存先: {output_path}", flush=True)
 
-    if df.empty:
-        print("[ERROR] データを取得できませんでした。", file=sys.stderr)
-        sys.exit(1)
+        df = fetch_all_rankings(url, label)
 
-    # 騰落率で昇順に並び替え（最も下がっているものが上位）
-    df["騰落率(%)"] = pd.to_numeric(df["騰落率(%)"], errors="coerce")
-    df = df.sort_values("騰落率(%)", ascending=True).reset_index(drop=True)
-    df.index += 1
-    df.index.name = "順位(プライム内)"
+        if df.empty:
+            print(f"[ERROR] {label}データを取得できませんでした。", file=sys.stderr)
+            continue
 
-    df.to_csv(output_path, encoding="utf-8-sig")
-    print(f"[完了] プライム市場 {len(df)} 件を保存しました → {output_path}")
+        df["騰落率(%)"] = pd.to_numeric(df["騰落率(%)"], errors="coerce")
+        ascending = (kind == "down")
+        df = df.sort_values("騰落率(%)", ascending=ascending).reset_index(drop=True)
+        df.index += 1
+        df.index.name = "順位(全市場)"
+
+        df.to_csv(output_path, encoding="utf-8-sig")
+        print(f"[完了] {label} 全市場 {len(df)} 件を保存しました → {output_path}")
 
 
 if __name__ == "__main__":
