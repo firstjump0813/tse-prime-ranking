@@ -121,6 +121,7 @@ def main():
             continue
 
         df["騰落率(%)"] = pd.to_numeric(df["騰落率(%)"], errors="coerce")
+        print(f"[DEBUG] 時刻の生値サンプル: {df['時刻'].head(3).tolist()}", flush=True)
         df["時刻"] = pd.to_datetime(df["時刻"], unit="ms", errors="coerce").dt.strftime("%Y/%m/%d")
         ascending = (kind == "down")
         df = df.sort_values("騰落率(%)", ascending=ascending).reset_index(drop=True)
