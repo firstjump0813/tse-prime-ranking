@@ -75,7 +75,7 @@ def fetch_page(url: str, page: int) -> tuple[list[dict], bool]:
             "前日比": cpr.get("changePrice", ""),
             "騰落率(%)": cpr.get("changePriceRate", ""),
             "出来高": cpr.get("volume", ""),
-            "時刻": item.get("date", ""),
+            "時刻": cpr.get("updateDateTime", item.get("date", "")),
         }
         rows.append(row)
 
@@ -121,8 +121,7 @@ def main():
             continue
 
         df["騰落率(%)"] = pd.to_numeric(df["騰落率(%)"], errors="coerce")
-        year = now.year
-        df["時刻"] = pd.to_datetime(df["時刻"].apply(lambda x: f"{year}/{x}" if x else ""), errors="coerce").dt.strftime("%Y/%m/%d")
+        df["時刻"] = pd.to_datetime(df["時刻"], errors="coerce").dt.strftime("%Y/%m/%d")
         ascending = (kind == "down")
         df = df.sort_values("騰落率(%)", ascending=ascending).reset_index(drop=True)
         df.index += 1
